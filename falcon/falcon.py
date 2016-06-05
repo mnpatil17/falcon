@@ -4,6 +4,7 @@ Functional Linear Algebra with SEJITS
 """
 
 import numpy as np
+from elem_wise_arr_op import specialize_element_wise
 
 # Syntax
 

@@ -1,10 +1,10 @@
-# A specializer to perform segmented reduction that parallelizes using the OpenMP Framework.
+"""
+A specializer to perform element-wise array operations with the SEJITS Framework.
+"""
 
 # Importations
 from __future__ import print_function, division
 import numpy as np
-import ctypes as ct
-import time
 
 from ctree.nodes import Project
 from ctree.c.nodes import *
@@ -20,9 +20,28 @@ from ctree.transformations import PyBasicConversions
 from ctree.types import get_c_type_from_numpy_dtype
 
 from collections import namedtuple
+import inspect
 
 
-FUNC_NAME = 'element_op'
+#
+# Specializer Decorator
+#
+
+
+def specialize_element_wise(func):
+    """
+    Specializes a two argument function.
+
+    :func: a two argument function that represents the element-wise array operation
+    :return: a function that takes in 2 arrays and returns an output of the same length
+    """
+    func_name_capital = func.__name__[0].upper() + func.__name__[1:]
+    func_hash = str(hash(func))
+    num_func_args = len(inspect.getargspec(func).args)
+    assert num_func_args == 2, \
+        "Element-wise operations must take exactly two arguments; {0} given".format(num_func_args)
+
+    return LazyElemWiseArrayOp.from_function(func, "ArrayOp" + func_name_capital + "_" + func_hash)
 
 
 #
@@ -30,8 +49,10 @@ FUNC_NAME = 'element_op'
 #
 
 
-class ConcreteArrayOp(ConcreteSpecializedFunction):
+FUNC_NAME = 'element_op'
 
+
+class ConcreteElemWiseArrayOp(ConcreteSpecializedFunction):
     """
     The actual python callable for DC Removal Specalizer.
     """
@@ -50,8 +71,7 @@ class ConcreteArrayOp(ConcreteSpecializedFunction):
         return output_arr
 
 
-class LazyArrayOp(LazySpecializedFunction):
-
+class LazyElemWiseArrayOp(LazySpecializedFunction):
     """
     The lazy version of the DC Removal Specializer that handles code generation just in time for
     execution.
@@ -85,7 +105,7 @@ class LazyArrayOp(LazySpecializedFunction):
             'length': Constant(length)
         })
 
-        reducer = CFile("generated", [
+        array_op = CFile("generated", [
             CppInclude("omp.h"),
             CppInclude("stdio.h"),
             apply_one,
@@ -98,9 +118,9 @@ class LazyArrayOp(LazySpecializedFunction):
                          defn=[
                              array_add_template
                          ])
-        ], 'omp')  # <--- TODO: is this necessarily supposed to be OMP
+        ], 'omp')
 
-        return [reducer]
+        return [array_op]
 
     def finalize(self, transform_result, program_config):
         tree = transform_result[0]
@@ -111,18 +131,26 @@ class LazyArrayOp(LazySpecializedFunction):
         entry_type = CFUNCTYPE(None, pointer, pointer, pointer)
 
         # Instantiation of the concrete function
-        fn = ConcreteArrayOp()
+        fn = ConcreteElemWiseArrayOp()
 
         return fn.finalize(Project([tree]), FUNC_NAME, entry_type)
 
+
+#
+# Testing Code
+#
+
 if __name__ == '__main__':
 
+    @specialize_element_wise
     def add(x, y):
         return x + y
 
+    @specialize_element_wise
     def mul(x, y):
         return x * y
 
+    @specialize_element_wise
     def div(x, y):
         return x / y
 
@@ -130,7 +158,10 @@ if __name__ == '__main__':
     test_inpt1 = np.array([5.0] * TEST_INPT_LEN)
     test_inpt2 = np.array([2.0] * TEST_INPT_LEN)
 
-    element_wise_array_op = LazyArrayOp.from_function(div, "ArrayOp")
-    result = element_wise_array_op(test_inpt1, test_inpt2)
+    add_result = add(test_inpt1, test_inpt2)
+    mul_result = mul(test_inpt1, test_inpt2)
+    div_result = div(test_inpt1, test_inpt2)
 
-    print ("Result: ", result)
+    print ("Added Correctly: ", all(add_result == test_inpt1 + test_inpt2))
+    print ("Muliplied Correctly: ", all(mul_result == test_inpt1 * test_inpt2))
+    print ("Divided Correctly: ", all(div_result == test_inpt1 / test_inpt2))
