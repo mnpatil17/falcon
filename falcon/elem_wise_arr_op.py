@@ -35,13 +35,13 @@ def specialize_element_wise(func):
     :func: a two argument function that represents the element-wise array operation
     :return: a function that takes in 2 arrays and returns an output of the same length
     """
-    func_name_capital = func.__name__[0].upper() + func.__name__[1:]
-    func_hash = str(hash(func))
+
+    func_name_capital = ''.join(x.capitalize() or '_' for x in func.__name__.split('_'))
     num_func_args = len(inspect.getargspec(func).args)
     assert num_func_args == 2, \
         "Element-wise operations must take exactly two arguments; {0} given".format(num_func_args)
 
-    return LazyElemWiseArrayOp.from_function(func, "ArrayOp" + func_name_capital + "_" + func_hash)
+    return LazyElemWiseArrayOp.from_function(func, "ArrayOp" + func_name_capital)
 
 
 #

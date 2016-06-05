@@ -8,8 +8,7 @@ from elem_wise_arr_op import specialize_element_wise
 
 # Syntax
 
-@specialize
-def dcRem(input): # input has to be one of our objects
+def dcRem(input):  # input has to be one of our objects
     avg = sum(input) / len(input)
     return input - avg
 
@@ -20,9 +19,9 @@ def specialize(func):
 
     :param: func The function to decorate
     """
-    builder = CFileBuilder() # the builder that builds things on the first call (JIT)
+    builder = CFileBuilder()  # the builder that builds things on the first call (JIT)
     # ... and continuing ...?
-    return func # <-- TODO actually do a c_func...
+    return func  # <-- TODO actually do a c_func...
 
 
 # TODO: We have to do more than just string together CFile objects, we have to actually compose
@@ -40,7 +39,6 @@ class CFileBuilder:
         Adds a function to the C file.
         """
         raise NotImplementedError
-
 
     def build(self):
         """
@@ -61,56 +59,90 @@ class Scalar:
         self.value = value
 
     def __add__(self, other):
-        assert other isinstance Scalar, "Operations on non-Scalar objects is not supported"
+        assert isinstance(other, Scalar), "Operations on non-Scalar objects is not supported"
         return Scalar(self.value + other.value)     # TODO: Call a SEJITS function...
 
     def __sub__(self, other):
-        assert other isinstance Scalar, "Operations on non-Scalar objects is not supported"
+        assert isinstance(other, Scalar), "Operations on non-Scalar objects is not supported"
         return Scalar(self.value - other.value)     # TODO: Call a SEJITS function...
 
     def __mul__(self, other):
-        assert other isinstance Scalar, "Operations on non-Scalar objects is not supported"
+        assert isinstance(other, Scalar), "Operations on non-Scalar objects is not supported"
         return Scalar(self.value * other.value)     # TODO: Call a SEJITS function...
 
     def __div__(self, other):
-        assert other isinstance Scalar, "Operations on non-Scalar objects is not supported"
+        assert isinstance(other, Scalar), "Operations on non-Scalar objects is not supported"
         return Scalar(self.value / other.value)     # TODO: Call a SEJITS function...
 
     def __pow__(self, other, modulo):
-        assert other isinstance Scalar, "Operations on non-Scalar objects is not supported"
-        assert modulo isinstance Scalar, "Operations on non-Scalar objects is not supported"
+        assert isinstance(other, Scalar), "Operations on non-Scalar objects is not supported"
+        assert isinstance(modulo, Scalar), "Operations on non-Scalar objects is not supported"
         return Scalar(self.value ** other.value % modulo.value)
 
 
-class FalconArray(np.array):
+class FalconArray(np.ndarray):
 
-    # we need to be able to get the C functions for all these things, somehow
-    # def sum(self):
-    #     return c_sum_func(self)  # TODO: needs to be replaced by a call to tbe backend
+    @staticmethod
+    def array(*args, **kwargs):
+        return np.array(*args, **kwargs).view(FalconArray)
 
     def __add__(self, other):
-        return self + other      # TODO: needs to be replaced by a call to the backend
+        return FalconArray.add(self, other)
+
+    @staticmethod
+    @specialize_element_wise
+    def add(a, b):
+        return a + b
 
     def __sub__(self, other):
-        return self - other      # TODO: needs to be replaced by a call to the backend
+        return FalconArray.subtract(self, other)
+
+    @staticmethod
+    @specialize_element_wise
+    def subtract(a, b):
+        return a - b
 
     def __mul__(self, other):
-        if other isinstance FalconArray:
-            assert self.shape == other.shape,
-                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}"
+        if isinstance(other, FalconArray):
+            assert self.shape == other.shape, \
+                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
                 .format(self.shape, other.shape)
 
-            return FalconArray(super.__mul__(self, other))
-        elif other isinstance Scalar:
+            return FalconArray.mul_elem_wise(self, other)
+        elif isinstance(other, Scalar):
             return FalconArray(super.__mul__(self, other.value))
 
+    @staticmethod
+    @specialize_element_wise
+    def mul_elem_wise(a, b):
+        return a * b
+
     def __div__(self, other):
-        if other isinstance FalconArray
-            assert self.shape == other.shape,
-                "Illegal element-wise division with FalconArrays with shape {0} and {1}"
+        if isinstance(other, FalconArray):
+            assert self.shape == other.shape, \
+                "Illegal element-wise division with FalconArrays with shape {0} and {1}" \
                 .format(self.shape, other.shape)
 
-            return FalconArray(super.__div__(self, other))
-        elif other isinstance Scalar:
+            return FalconArray.div_elem_wise(self, other)
+        elif isinstance(other, Scalar):
             return FalconArray(super.__div__(self, other.value))
 
+    @staticmethod
+    @specialize_element_wise
+    def div_elem_wise(a, b):
+        return a / b
+
+
+#
+# Testing Code
+#
+
+if __name__ == '__main__':
+    TEST_INPT_LEN = 5
+    test_inpt1 = FalconArray.array([2.0] * TEST_INPT_LEN)
+    test_inpt2 = FalconArray.array([5.0] * TEST_INPT_LEN)
+
+    print "Addition Result: ", test_inpt1 + test_inpt2
+    print "Subtraction Result: ", test_inpt1 - test_inpt2
+    print "Element-wise Multiplication Result: ", test_inpt1 * test_inpt2
+    print "Element-wise Division Result: ", test_inpt1 / test_inpt2
