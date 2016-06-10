@@ -4,7 +4,9 @@ Functional Linear Algebra with SEJITS
 """
 
 import numpy as np
-from elem_wise_arr_op import specialize_element_wise
+from elem_wise_arr_arr_op import specialize_arr_arr_element_wise
+from elem_wise_arr_scalar_op import specialize_arr_scalar_element_wise
+
 
 # Syntax
 
@@ -82,25 +84,67 @@ class Scalar:
 
 class FalconArray(np.ndarray):
 
-    @staticmethod
-    def array(*args, **kwargs):
-        return np.array(*args, **kwargs).view(FalconArray)
+    #
+    # Addition
+    #
 
     def __add__(self, other):
-        return FalconArray.add(self, other)
+        if isinstance(other, FalconArray):
+            assert self.shape == other.shape, \
+                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
+                .format(self.shape, other.shape)
+            return FalconArray.add_arr_arr_elem_wise(self, other)
+        else:
+            return FalconArray.add_arr_scalar_elem_wise(self, other)
 
     @staticmethod
-    @specialize_element_wise
-    def add(a, b):
+    @specialize_arr_arr_element_wise
+    def add_arr_arr_elem_wise(a, b):
         return a + b
 
+    @staticmethod
+    @specialize_arr_scalar_element_wise
+    def add_arr_scalar_elem_wise(a, b):
+        """
+        Performs element-wise addition on an input array.
+
+        :param: a The array
+        :param: b The scalar
+        """
+        return a + b
+
+    #
+    # Subtraction
+    #
+
     def __sub__(self, other):
-        return FalconArray.subtract(self, other)
+        if isinstance(other, FalconArray):
+            assert self.shape == other.shape, \
+                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
+                .format(self.shape, other.shape)
+            return FalconArray.sub_arr_arr_elem_wise(self, other)
+        else:
+            return FalconArray.sub_arr_scalar_elem_wise(self, other)
 
     @staticmethod
-    @specialize_element_wise
-    def subtract(a, b):
+    @specialize_arr_arr_element_wise
+    def sub_arr_arr_elem_wise(a, b):
         return a - b
+
+    @staticmethod
+    @specialize_arr_scalar_element_wise
+    def sub_arr_scalar_elem_wise(a, b):
+        """
+        Performs element-wise subtraction on an input array.
+
+        :param: a The array
+        :param: b The scalar
+        """
+        return a - b
+
+    #
+    # Multiplication
+    #
 
     def __mul__(self, other):
         if isinstance(other, FalconArray):
@@ -108,14 +152,29 @@ class FalconArray(np.ndarray):
                 "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
                 .format(self.shape, other.shape)
 
-            return FalconArray.mul_elem_wise(self, other)
-        elif isinstance(other, Scalar):
-            return FalconArray(super.__mul__(self, other.value))
+            return FalconArray.mul_arr_arr_elem_wise(self, other)
+        else:
+            return FalconArray.mul_arr_scalar_elem_wise(self, other)
 
     @staticmethod
-    @specialize_element_wise
-    def mul_elem_wise(a, b):
+    @specialize_arr_arr_element_wise
+    def mul_arr_arr_elem_wise(a, b):
         return a * b
+
+    @staticmethod
+    @specialize_arr_scalar_element_wise
+    def mul_arr_scalar_elem_wise(a, b):
+        """
+        Performs element-wise multiplication on an input array.
+
+        :param: a The array
+        :param: b The scalar
+        """
+        return a * b
+
+    #
+    # Division
+    #
 
     def __div__(self, other):
         if isinstance(other, FalconArray):
@@ -123,14 +182,90 @@ class FalconArray(np.ndarray):
                 "Illegal element-wise division with FalconArrays with shape {0} and {1}" \
                 .format(self.shape, other.shape)
 
-            return FalconArray.div_elem_wise(self, other)
-        elif isinstance(other, Scalar):
-            return FalconArray(super.__div__(self, other.value))
+            return FalconArray.div_arr_arr_elem_wise(self, other)
+        else:
+            return FalconArray.div_arr_scalar_elem_wise(self, other)
 
     @staticmethod
-    @specialize_element_wise
-    def div_elem_wise(a, b):
+    @specialize_arr_arr_element_wise
+    def div_arr_arr_elem_wise(a, b):
         return a / b
+
+    @staticmethod
+    @specialize_arr_scalar_element_wise
+    def div_arr_scalar_elem_wise(a, b):
+        """
+        Performs element-wise division on an input array.
+
+        :param: a The array
+        :param: b The scalar
+        """
+        return a / b
+
+    #
+    # Power (Not completed)
+    #
+
+    def __pow__(self, other):
+        return FalconArray.pow_arr_arr_elem_wise(self, other)
+
+    @staticmethod
+    @specialize_arr_arr_element_wise
+    def pow_arr_arr_elem_wise(a, b):
+        # TODO: Make a special specializer just for this...
+        # You can call the pow() function in C for doubles
+        # You can call the powl() function in C for longs
+        # You can call the powf() function in C for floats
+        # Remember, your data-type might have to be increased...
+        raise NotImplementedError
+
+    #
+    # Creation Methods
+    #
+
+    @staticmethod
+    def empty(*args, **kwargs):
+        return np.empty(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def zeros(*args, **kwargs):
+        return np.zeros(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def zeros_like(*args, **kwargs):
+        return np.zeros_like(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def rand(*args, **kwargs):
+        return np.random.rand(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def standard_normal(*args, **kwargs):
+        return np.random.standard_normal(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def empty_like(*args, **kwargs):
+        return np.empty_like(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def ones(*args, **kwargs):
+        return np.ones(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def array(*args, **kwargs):
+        return np.array(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def ones_like(*args, **kwargs):
+        return np.ones_like(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def eye(*args, **kwargs):
+        return np.eye(*args, **kwargs).view(FalconArray)
+
+    @staticmethod
+    def fromstring(*args, **kwargs):
+        return np.fromstring(*args, **kwargs).view(FalconArray)
 
 
 #
@@ -138,11 +273,14 @@ class FalconArray(np.ndarray):
 #
 
 if __name__ == '__main__':
-    TEST_INPT_LEN = 5
+    TEST_INPT_LEN = 500000
     test_inpt1 = FalconArray.array([2.0] * TEST_INPT_LEN)
     test_inpt2 = FalconArray.array([5.0] * TEST_INPT_LEN)
 
-    print "Addition Result: ", test_inpt1 + test_inpt2
-    print "Subtraction Result: ", test_inpt1 - test_inpt2
-    print "Element-wise Multiplication Result: ", test_inpt1 * test_inpt2
-    print "Element-wise Division Result: ", test_inpt1 / test_inpt2
+    print "Test Output: ", dcRem(test_inpt1)
+
+
+    # print "Addition Result: ", test_inpt1 + test_inpt2
+    # print "Subtraction Result: ", test_inpt1 - test_inpt2
+    # print "Element-wise Multiplication Result: ", test_inpt1 * test_inpt2
+    # print "Element-wise Division Result: ", test_inpt1 / test_inpt2

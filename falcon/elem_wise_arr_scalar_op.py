@@ -21,6 +21,7 @@ from ctree.types import get_c_type_from_numpy_dtype
 
 from collections import namedtuple
 import inspect
+# from falcon import FalconArray
 
 
 #
@@ -28,7 +29,7 @@ import inspect
 #
 
 
-def specialize_element_wise(func):
+def specialize_arr_scalar_element_wise(func):
     """
     Specializes a two argument function.
 
@@ -41,7 +42,7 @@ def specialize_element_wise(func):
     assert num_func_args == 2, \
         "Element-wise operations must take exactly two arguments; {0} given".format(num_func_args)
 
-    return LazyElemWiseArrayOp.from_function(func, "ArrayOp" + func_name_capital)
+    return LazyElemWiseArrayScalarOp.from_function(func, "ElemArrayScalarOp" + func_name_capital)
 
 
 #
@@ -52,7 +53,7 @@ def specialize_element_wise(func):
 FUNC_NAME = 'element_op'
 
 
-class ConcreteElemWiseArrayOp(ConcreteSpecializedFunction):
+class ConcreteElemWiseArrayScalarOp(ConcreteSpecializedFunction):
     """
     The actual python callable for DC Removal Specalizer.
     """
@@ -61,26 +62,27 @@ class ConcreteElemWiseArrayOp(ConcreteSpecializedFunction):
         self._c_function = self._compile(entry_name, tree, entry_type)
         return self
 
-    def __call__(self, input1, input2):
+    def __call__(self, arr, scalar):
 
-        assert input1.shape == input2.shape, \
-            "Both input arrays must have the same shape for element-wise operations"
-
-        output_arr = np.zeros(input1.shape).astype(input1.dtype)
-        self._c_function(input1, input2, output_arr)
+        output_arr = np.zeros(arr.shape).astype(arr.dtype)
+        self._c_function(arr, scalar, output_arr)
         return output_arr
 
 
-class LazyElemWiseArrayOp(LazySpecializedFunction):
+class LazyElemWiseArrayScalarOp(LazySpecializedFunction):
     """
     The lazy version of the DC Removal Specializer that handles code generation just in time for
     execution.
     """
-    subconfig_type = namedtuple('subconfig', ['dtype', 'ndim', 'shape', 'size', 'flags'])
+    subconfig_type = namedtuple('subconfig', ['dtype', 'ndim', 'shape', 'size',
+                                              'scalar_type', 'flags'])
 
     def args_to_subconfig(self, args):
-        input1 = args[0]
-        return self.subconfig_type(input1.dtype, input1.ndim, input1.shape, input1.size, [])
+        arr = args[0]
+        scalar = args[1]
+
+        # TODO: check if scalar is an array, then get is dtype, otherwise, it should be type(scalar)
+        return self.subconfig_type(arr.dtype, arr.ndim, arr.shape, arr.size, type(scalar), [])
 
     def transform(self, py_ast, program_config):
 
@@ -89,17 +91,20 @@ class LazyElemWiseArrayOp(LazySpecializedFunction):
         length = np.prod(input_data.size)
         pointer = np.ctypeslib.ndpointer(input_data.dtype, input_data.ndim, input_data.shape)
         data_type = get_c_type_from_numpy_dtype(input_data.dtype)()
+        scalar_data_type = get_c_type_from_numpy_dtype(np.dtype(input_data.scalar_type))()
 
         apply_one = PyBasicConversions().visit(py_ast.body[0])
         apply_one.name = 'apply'
         apply_one.params[0].type = data_type
-        apply_one.params[1].type = data_type
-        apply_one.return_type = data_type
+        apply_one.params[1].type = scalar_data_type
+        apply_one.return_type = data_type  # TODO: figure out which data type to actually preserve
+
+        # TODO: MAKE A CLASS THAT HANDLES SUPPORTED TYPES (INT, FLOAT, DOUBLE)
 
         array_add_template = StringTemplate(r"""
             #pragma omp parallel for
             for (int i = 0; i < $length; i++) {
-                output[i] = apply(input1[i], input2[i]);
+                output[i] = apply(arr[i], scalar);
             }
         """, {
             'length': Constant(length)
@@ -111,8 +116,8 @@ class LazyElemWiseArrayOp(LazySpecializedFunction):
             apply_one,
             FunctionDecl(None, FUNC_NAME,
                          params=[
-                             SymbolRef("input1", pointer()),
-                             SymbolRef("input2", pointer()),
+                             SymbolRef("arr", pointer()),
+                             SymbolRef("scalar", scalar_data_type),
                              SymbolRef("output", pointer())
                          ],
                          defn=[
@@ -128,10 +133,11 @@ class LazyElemWiseArrayOp(LazySpecializedFunction):
         # Get the argument type data
         input_data = program_config[0]
         pointer = np.ctypeslib.ndpointer(input_data.dtype, input_data.ndim, input_data.shape)
-        entry_type = CFUNCTYPE(None, pointer, pointer, pointer)
+        scalar_data_type_referenced = get_c_type_from_numpy_dtype(np.dtype(input_data.scalar_type))
+        entry_type = CFUNCTYPE(None, pointer, scalar_data_type_referenced, pointer)
 
         # Instantiation of the concrete function
-        fn = ConcreteElemWiseArrayOp()
+        fn = ConcreteElemWiseArrayScalarOp()
 
         return fn.finalize(Project([tree]), FUNC_NAME, entry_type)
 
@@ -142,26 +148,25 @@ class LazyElemWiseArrayOp(LazySpecializedFunction):
 
 if __name__ == '__main__':
 
-    @specialize_element_wise
+    @specialize_arr_scalar_element_wise
     def add(x, y):
         return x + y
 
-    @specialize_element_wise
+    @specialize_arr_scalar_element_wise
     def mul(x, y):
         return x * y
 
-    @specialize_element_wise
+    @specialize_arr_scalar_element_wise
     def div(x, y):
         return x / y
 
     TEST_INPT_LEN = 5
     test_inpt1 = np.array([5.0] * TEST_INPT_LEN)
-    test_inpt2 = np.array([2.0] * TEST_INPT_LEN)
 
-    add_result = add(test_inpt1, test_inpt2)
-    mul_result = mul(test_inpt1, test_inpt2)
-    div_result = div(test_inpt1, test_inpt2)
+    add_result = add(test_inpt1, 5)
+    mul_result = mul(test_inpt1, 5)
+    div_result = div(test_inpt1, 5)
 
-    print ("Added Correctly: ", all(add_result == test_inpt1 + test_inpt2))
-    print ("Muliplied Correctly: ", all(mul_result == test_inpt1 * test_inpt2))
-    print ("Divided Correctly: ", all(div_result == test_inpt1 / test_inpt2))
+    print ("Added Correctly: ", all(add_result == test_inpt1 + 5))
+    print ("Muliplied Correctly: ", all(mul_result == test_inpt1 * 5))
+    print ("Divided Correctly: ", all(div_result == test_inpt1 / 5))
