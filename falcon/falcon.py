@@ -56,7 +56,6 @@ class Scalar:
     """
     An implementation of SEJITS operations on scalar values.
     """
-
     def __init__(self, value):
         self.value = value
 
@@ -91,7 +90,7 @@ class FalconArray(np.ndarray):
     def __add__(self, other):
         if isinstance(other, FalconArray):
             assert self.shape == other.shape, \
-                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
+                "Illegal element-wise multiplication with FalconArrays of shape {0} and {1}" \
                 .format(self.shape, other.shape)
             return FalconArray.add_arr_arr_elem_wise(self, other)
         else:
@@ -100,6 +99,12 @@ class FalconArray(np.ndarray):
     @staticmethod
     @specialize_arr_arr_element_wise
     def add_arr_arr_elem_wise(a, b):
+        """
+        Performs element-wise addition on two input arrays.
+
+        :param: a The array
+        :param: b The array
+        """
         return a + b
 
     @staticmethod
@@ -120,7 +125,7 @@ class FalconArray(np.ndarray):
     def __sub__(self, other):
         if isinstance(other, FalconArray):
             assert self.shape == other.shape, \
-                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
+                "Illegal element-wise multiplication with FalconArrays of shape {0} and {1}" \
                 .format(self.shape, other.shape)
             return FalconArray.sub_arr_arr_elem_wise(self, other)
         else:
@@ -129,6 +134,12 @@ class FalconArray(np.ndarray):
     @staticmethod
     @specialize_arr_arr_element_wise
     def sub_arr_arr_elem_wise(a, b):
+        """
+        Performs element-wise subtraction on two input arrays.
+
+        :param: a Input array
+        :param: b Input array
+        """
         return a - b
 
     @staticmethod
@@ -149,7 +160,7 @@ class FalconArray(np.ndarray):
     def __mul__(self, other):
         if isinstance(other, FalconArray):
             assert self.shape == other.shape, \
-                "Illegal element-wise multiplication with FalconArrays with shape {0} and {1}" \
+                "Illegal element-wise multiplication with FalconArrays of shape {0} and {1}" \
                 .format(self.shape, other.shape)
 
             return FalconArray.mul_arr_arr_elem_wise(self, other)
@@ -159,6 +170,12 @@ class FalconArray(np.ndarray):
     @staticmethod
     @specialize_arr_arr_element_wise
     def mul_arr_arr_elem_wise(a, b):
+        """
+        Performs element-wise multiplication on two input arrays.
+
+        :param: a Input array
+        :param: b Input array
+        """
         return a * b
 
     @staticmethod
@@ -179,7 +196,7 @@ class FalconArray(np.ndarray):
     def __div__(self, other):
         if isinstance(other, FalconArray):
             assert self.shape == other.shape, \
-                "Illegal element-wise division with FalconArrays with shape {0} and {1}" \
+                "Illegal element-wise division with FalconArrays of shape {0} and {1}" \
                 .format(self.shape, other.shape)
 
             return FalconArray.div_arr_arr_elem_wise(self, other)
@@ -189,6 +206,12 @@ class FalconArray(np.ndarray):
     @staticmethod
     @specialize_arr_arr_element_wise
     def div_arr_arr_elem_wise(a, b):
+        """
+        Performs element-wise division on two input arrays.
+
+        :param: a Input array
+        :param: b Input array
+        """
         return a / b
 
     @staticmethod
@@ -207,16 +230,6 @@ class FalconArray(np.ndarray):
     #
 
     def __pow__(self, other):
-        return FalconArray.pow_arr_arr_elem_wise(self, other)
-
-    @staticmethod
-    @specialize_arr_arr_element_wise
-    def pow_arr_arr_elem_wise(a, b):
-        # TODO: Make a special specializer just for this...
-        # You can call the pow() function in C for doubles
-        # You can call the powl() function in C for longs
-        # You can call the powf() function in C for floats
-        # Remember, your data-type might have to be increased...
         raise NotImplementedError
 
     #
