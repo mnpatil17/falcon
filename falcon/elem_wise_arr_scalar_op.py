@@ -50,7 +50,7 @@ def specialize_arr_scalar_element_wise(func):
 #
 
 
-FUNC_NAME = 'element_op'
+FUNC_NAME = 'element_op2'
 
 
 class ConcreteElemWiseArrayScalarOp(ConcreteSpecializedFunction):
@@ -94,7 +94,7 @@ class LazyElemWiseArrayScalarOp(LazySpecializedFunction):
         scalar_data_type = get_c_type_from_numpy_dtype(np.dtype(input_data.scalar_type))()
 
         apply_one = PyBasicConversions().visit(py_ast.body[0])
-        apply_one.name = 'apply'
+        apply_one.name = 'apply2'  # TODO: this needs to be a legit name
         apply_one.params[0].type = data_type
         apply_one.params[1].type = scalar_data_type
         apply_one.return_type = data_type  # TODO: figure out which data type to actually preserve
@@ -104,7 +104,7 @@ class LazyElemWiseArrayScalarOp(LazySpecializedFunction):
         array_add_template = StringTemplate(r"""
             #pragma omp parallel for
             for (int i = 0; i < $length; i++) {
-                output[i] = apply(arr[i], scalar);
+                output[i] = apply2(arr[i], scalar);
             }
         """, {
             'length': Constant(length)

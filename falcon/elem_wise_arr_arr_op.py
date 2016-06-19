@@ -92,7 +92,7 @@ class LazyElemWiseArrayArrayOp(LazySpecializedFunction):
         data_type = get_c_type_from_numpy_dtype(input_data.dtype)()
 
         apply_one = PyBasicConversions().visit(py_ast.body[0])
-        apply_one.name = 'apply'
+        apply_one.name = 'apply' # TODO: this needs to be a legit name
         apply_one.params[0].type = data_type
         apply_one.params[1].type = data_type
         apply_one.return_type = data_type

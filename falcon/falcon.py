@@ -4,33 +4,16 @@ Functional Linear Algebra with SEJITS
 """
 
 import numpy as np
-from elem_wise_arr_arr_op import specialize_arr_arr_element_wise
-from elem_wise_arr_scalar_op import specialize_arr_scalar_element_wise
+from falcon_array import FalconArray
+from ctree.c.nodes import CFile
+from ctree.cpp.nodes import CppInclude
+from ctree.types import get_c_type_from_numpy_dtype
+from ctypes import CFUNCTYPE
+from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+from ctree.nodes import Project
+from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef
 
-# TODO: We have to do more than just string together CFile objects, we have to actually compose
-class CFileBuilder:
-    """
-    Helps build a CFile with a lot of functions
-    """
-
-    def __init__(self):
-        self._build_complete = False
-        self._c_files = []
-
-    def add(self, new_c_files):          # Is this really supposed to be called "c_function?"
-        """
-        Adds a function to the C file.
-        """
-        self._c_files.extend(new_c_files)
-
-    def build(self):
-        """
-        Finishes the building of the CFile object
-
-        :return: A CFile object that contains the desired code
-        """
-        self._build_complete = True
-        return self._c_files
+ENTRY_NAME = 'sejits_main'
 
 
 class Scalar:
@@ -63,256 +46,7 @@ class Scalar:
         return Scalar(self.value ** other.value % modulo.value)
 
 
-class FalconArray(np.ndarray):
-
-    #
-    # Addition
-    #
-
-    def __add__(self, other):
-        if isinstance(other, FalconArray):
-            assert self.shape == other.shape, \
-                "Illegal element-wise multiplication with FalconArrays of shape {0} and {1}" \
-                .format(self.shape, other.shape)
-
-            result = FalconArray.array(FalconArray.add_arr_arr_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.add_arr_arr_elem_wise.latest_transform_result)
-
-        else:
-            result = FalconArray.array(FalconArray.add_arr_scalar_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.add_arr_scalar_elem_wise.latest_transform_result)
-        return result
-
-    @staticmethod
-    @specialize_arr_arr_element_wise
-    def add_arr_arr_elem_wise(a, b):
-        """
-        Performs element-wise addition on two input arrays.
-
-        :param: a The array
-        :param: b The array
-        """
-        return a + b
-
-    @staticmethod
-    @specialize_arr_scalar_element_wise
-    def add_arr_scalar_elem_wise(a, b):
-        """
-        Performs element-wise addition on an input array.
-
-        :param: a The array
-        :param: b The scalar
-        """
-        return a + b
-
-    #
-    # Subtraction
-    #
-
-    def __sub__(self, other):
-        if isinstance(other, FalconArray):
-            assert self.shape == other.shape, \
-                "Illegal element-wise multiplication with FalconArrays of shape {0} and {1}" \
-                .format(self.shape, other.shape)
-
-            result = FalconArray.array(FalconArray.sub_arr_arr_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.sub_arr_arr_elem_wise.latest_transform_result)
-        else:
-            result = FalconArray.array(FalconArray.sub_arr_scalar_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.sub_arr_scalar_elem_wise.latest_transform_result)
-        return result
-
-    @staticmethod
-    @specialize_arr_arr_element_wise
-    def sub_arr_arr_elem_wise(a, b):
-        """
-        Performs element-wise subtraction on two input arrays.
-
-        :param: a Input array
-        :param: b Input array
-        """
-        return a - b
-
-    @staticmethod
-    @specialize_arr_scalar_element_wise
-    def sub_arr_scalar_elem_wise(a, b):
-        """
-        Performs element-wise subtraction on an input array.
-
-        :param: a The array
-        :param: b The scalar
-        """
-        return a - b
-
-    #
-    # Multiplication
-    #
-
-    def __mul__(self, other):
-        if isinstance(other, FalconArray):
-            assert self.shape == other.shape, \
-                "Illegal element-wise multiplication with FalconArrays of shape {0} and {1}" \
-                .format(self.shape, other.shape)
-
-            result = FalconArray.array(FalconArray.mul_arr_arr_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.mul_arr_arr_elem_wise.latest_transform_result)
-        else:
-            result = FalconArray.array(FalconArray.mul_arr_scalar_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.mul_arr_scalar_elem_wise.latest_transform_result)
-        return result
-
-    __rmul__ = __mul__
-    __radd__ = __add__
-    # TODO: __rsub__ and __rdiv__
-
-    @staticmethod
-    @specialize_arr_arr_element_wise
-    def mul_arr_arr_elem_wise(a, b):
-        """
-        Performs element-wise multiplication on two input arrays.
-
-        :param: a Input array
-        :param: b Input array
-        """
-        return a * b
-
-    @staticmethod
-    @specialize_arr_scalar_element_wise
-    def mul_arr_scalar_elem_wise(a, b):
-        """
-        Performs element-wise multiplication on an input array.
-
-        :param: a The array
-        :param: b The scalar
-        """
-        return a * b
-
-    #
-    # Division
-    #
-
-    def __div__(self, other):
-        if isinstance(other, FalconArray):
-            assert self.shape == other.shape, \
-                "Illegal element-wise division with FalconArrays of shape {0} and {1}" \
-                .format(self.shape, other.shape)
-
-            result = FalconArray.array(FalconArray.div_arr_arr_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.div_arr_arr_elem_wise.latest_transform_result)
-        else:
-            result = FalconArray.array(FalconArray.div_arr_scalar_elem_wise(self, other))
-            result._add_to_c_files_for_array = self._add_to_c_files_for_array
-            self._add_to_c_files_for_array(
-                FalconArray.div_arr_scalar_elem_wise.latest_transform_result)
-
-        return result
-
-    @staticmethod
-    @specialize_arr_arr_element_wise
-    def div_arr_arr_elem_wise(a, b):
-        """
-        Performs element-wise division on two input arrays.
-
-        :param: a Input array
-        :param: b Input array
-        """
-        return a / b
-
-    @staticmethod
-    @specialize_arr_scalar_element_wise
-    def div_arr_scalar_elem_wise(a, b):
-        """
-        Performs element-wise division on an input array.
-
-        :param: a The array
-        :param: b The scalar
-        """
-        return a / b
-
-    #
-    # Power (Not completed)
-    #
-
-    def __pow__(self, other):
-        raise NotImplementedError
-
-    #
-    # Internal Methods
-    #
-
-    def _add_to_c_files_for_array(self, file_list):
-        """
-        This method should be re-assigned at some point before this FalconArray is used in
-        operations.
-
-        :param file_list: The list of files to add to the list of C files for the FalconArray
-        """
-        raise NotImplementedError()
-
-    #
-    # Creation Methods
-    #
-
-    @staticmethod
-    def empty(*args, **kwargs):
-        return np.empty(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def zeros(*args, **kwargs):
-        return np.zeros(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def zeros_like(*args, **kwargs):
-        return np.zeros_like(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def rand(*args, **kwargs):
-        return np.random.rand(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def standard_normal(*args, **kwargs):
-        return np.random.standard_normal(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def empty_like(*args, **kwargs):
-        return np.empty_like(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def ones(*args, **kwargs):
-        return np.ones(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def array(*args, **kwargs):
-        return np.array(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def ones_like(*args, **kwargs):
-        return np.ones_like(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def eye(*args, **kwargs):
-        return np.eye(*args, **kwargs).view(FalconArray)
-
-    @staticmethod
-    def fromstring(*args, **kwargs):
-        return np.fromstring(*args, **kwargs).view(FalconArray)
-
-
-class CFunction():
+class CFunction(ConcreteSpecializedFunction):
     """
     A primitive definition of a C Function that, when called, evaluates entirely in C
 
@@ -332,8 +66,115 @@ class CFunction():
             if isinstance(arg, FalconArray):
                 arg._add_to_c_files_for_array = add_to_files
 
+        print "Args: ", args
+
         # TODO: Return the c function INSTEAD!
-        return self.py_func(*args)
+        if self.c_func is None:
+            result = self.py_func(*args)
+            final_c_file = self.c_file_builder.build()
+
+            included_headers = []
+            filtered_final_c_file = []
+            for component in final_c_file.body:
+                if isinstance(component, CppInclude):
+                    already_found = False
+                    for cpp in included_headers:
+                        if cpp.target == component.target and \
+                           cpp.angled_brackets == component.angled_brackets:
+                            already_found = True
+                            break
+
+                    if not already_found:
+                        included_headers.append(component)
+                        filtered_final_c_file.append(component)
+                else:
+                    filtered_final_c_file.append(component)
+
+            final_c_file.body = filtered_final_c_file
+            pointer = get_c_type_from_numpy_dtype(np.dtype(np.float64))
+            # pointer = np.ctypeslib.ndpointer(np.dtype(np.float64))
+
+            # You're going to have to splat this into entry_type
+            pointer2 = np.ctypeslib.ndpointer(args[0].dtype, args[0].ndim, args[0].shape)
+
+            entry_type = CFUNCTYPE(None, pointer2, pointer2, pointer2)
+
+            main = self.transf(final_c_file, pointer, pointer2)
+            self.c_func = self._compile(ENTRY_NAME, Project([main]), entry_type)
+
+            # Stuff
+            # pointer = np.ctypeslib.ndpointer(input_data.dtype, input_data.ndim, input_data.shape)\
+            # entry_type = CFUNCTYPE(None, pointer, scalar_data_type_referenced, pointer)
+
+            print "Final File: ", final_c_file.body
+        else:
+            result = self.c_func(*args)
+        return result
+
+    def args_to_subconfig(self, args):
+        raise NotImplementedError()
+
+    def transf(self, c_file, pointer, pointer2):
+
+        print "Body: ", c_file.body
+
+        body = []
+
+        headers = [
+            CppInclude("omp.h"),
+            CppInclude("stdio.h")
+        ]
+
+        sejits_main = [FunctionDecl(None, ENTRY_NAME,
+                                    params=[
+                                        SymbolRef("input1", pointer2()),
+                                        SymbolRef("input2", pointer2()),
+                                        SymbolRef("output", pointer2())
+                                    ],
+                                    defn=[
+                                        FunctionCall('element_op', ['input1', 'input2', 'output']),
+                                        FunctionCall('element_op2', ['output', 2, 'output'])
+                                    ])
+                       ]
+
+        body.extend(headers)
+        body.extend(c_file.body)
+        body.extend(sejits_main)
+
+        final_c_file = CFile('generated_final', body, 'omp')
+        return final_c_file
+
+# TODO: We have to do more than just string together CFile objects, we have to actually compose
+
+
+class CFileBuilder:
+    """
+    Helps build a CFile with a lot of functions
+    """
+
+    def __init__(self):
+        self._build_complete = False
+        self._c_files = []
+        self._final_c_file = None
+
+    def add(self, new_c_files):          # Is this really supposed to be called "c_function?"
+        """
+        Adds a function to the C file.
+        """
+        self._c_files.extend(new_c_files)
+
+    def build(self):
+        """
+        Finishes the building of the CFile object
+
+        :return: A CFile object that contains the desired code
+        """
+        new_body = []
+        for file in self._c_files:
+            new_body.extend(file.body)
+
+        self._final_c_file = CFile("generated_final", new_body, "omp")
+        return self._final_c_file
 
 
 # This is an example function
@@ -346,7 +187,8 @@ def specialize(func):
     new_func = CFunction(func)
     return new_func
 
-@specialize
+
+# @specialize
 def dcRem(input):  # input has to be one of our objects
     avg = sum(input) / len(input)
     return input - avg
@@ -371,7 +213,7 @@ if __name__ == '__main__':
 
     print "Test Output: ", double_input(test_inpt1, test_inpt2)
 
-    print len(double_input.c_file_builder._c_files)
+    print "Number of C Files: ", len(double_input.c_file_builder._c_files)
 
     # print "Addition Result: ", test_inpt1 + test_inpt2
     # print "Subtraction Result: ", test_inpt1 - test_inpt2
