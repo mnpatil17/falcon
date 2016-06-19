@@ -70,12 +70,30 @@ class CFunction(ConcreteSpecializedFunction):
 
         # TODO: Return the c function INSTEAD!
         if self.c_func is None:
-            result = self.py_func(*args)
+            python_output = self.py_func(*args)
             final_c_file = self.c_file_builder.build()
 
+            # Get pointers for all the arguments
+            argument_pointers = []
+            for i, arg in enumerate(args):
+                if isinstance(arg, FalconArray):
+                    ptr = np.ctypeslib.ndpointer(args[i].dtype, args[i].ndim, args[i].shape)
+                    argument_pointers.append(ptr)
+                else:
+                    scalar_data_type = get_c_type_from_numpy_dtype(np.dtype(type(arg)))()
+                    argument_pointers.append(scalar_data_type)
+
+            output_arr = np.zeros(python_output.shape).astype(python_output.dtype)
+            argument_pointers.append(np.ctypeslib.ndpointer(output_arr.dtype,
+                                                            output_arr.ndim, output_arr.shape))
+
+            # TODO: need to deal with the pointer passing here; should not be argument_pointers[0]
+            main = self.transf(final_c_file, argument_pointers[0])
+
+            # TODO: make this into a helper function
             included_headers = []
             filtered_final_c_file = []
-            for component in final_c_file.body:
+            for component in main.body:
                 if isinstance(component, CppInclude):
                     already_found = False
                     for cpp in included_headers:
@@ -90,31 +108,25 @@ class CFunction(ConcreteSpecializedFunction):
                 else:
                     filtered_final_c_file.append(component)
 
-            final_c_file.body = filtered_final_c_file
-            pointer = get_c_type_from_numpy_dtype(np.dtype(np.float64))
-            # pointer = np.ctypeslib.ndpointer(np.dtype(np.float64))
-
-            # You're going to have to splat this into entry_type
-            pointer2 = np.ctypeslib.ndpointer(args[0].dtype, args[0].ndim, args[0].shape)
-
-            entry_type = CFUNCTYPE(None, pointer2, pointer2, pointer2)
-
-            main = self.transf(final_c_file, pointer, pointer2)
+            args = args + (output_arr, )
+            main.body = filtered_final_c_file
+            entry_type = CFUNCTYPE(None, *argument_pointers)
             self.c_func = self._compile(ENTRY_NAME, Project([main]), entry_type)
-
-            # Stuff
-            # pointer = np.ctypeslib.ndpointer(input_data.dtype, input_data.ndim, input_data.shape)\
-            # entry_type = CFUNCTYPE(None, pointer, scalar_data_type_referenced, pointer)
-
-            print "Final File: ", final_c_file.body
+            self.c_func(*args)
+            result = output_arr
         else:
-            result = self.c_func(*args)
+
+            # TODO: the output array needs to be made of variable
+            output_arr = np.zeros(args[0].shape).astype(args[0].dtype)
+            args = args + (output_arr, )
+            self.c_func(*args)
+            result = output_arr
         return result
 
     def args_to_subconfig(self, args):
         raise NotImplementedError()
 
-    def transf(self, c_file, pointer, pointer2):
+    def transf(self, c_file, pointer):
 
         print "Body: ", c_file.body
 
@@ -127,14 +139,18 @@ class CFunction(ConcreteSpecializedFunction):
 
         sejits_main = [FunctionDecl(None, ENTRY_NAME,
                                     params=[
-                                        SymbolRef("input1", pointer2()),
-                                        SymbolRef("input2", pointer2()),
-                                        SymbolRef("output", pointer2())
+                                        SymbolRef("input1", pointer()),
+                                        SymbolRef("input2", pointer()),
+                                        SymbolRef("output", pointer())
                                     ],
                                     defn=[
+                                        # TODO: element_op, element_op2 need to be passed in to the
+                                        # specializer
                                         FunctionCall('element_op', ['input1', 'input2', 'output']),
                                         FunctionCall('element_op2', ['output', 2, 'output'])
                                     ])
+                       # FunctionCall() for statement in c_file.body if isinstance(statement,
+                       # FunctionDecl)
                        ]
 
         body.extend(headers)
